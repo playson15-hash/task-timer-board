@@ -44,13 +44,22 @@ export default {
 					DEFAULT: 'hsl(var(--accent))',
 					foreground: 'hsl(var(--accent-foreground))'
 				},
-				popover: {
-					DEFAULT: 'hsl(var(--popover))',
-					foreground: 'hsl(var(--popover-foreground))'
-				},
 				card: {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
+				},
+				kanban: {
+					todo: 'hsl(var(--column-todo))',
+					'todo-bg': 'hsl(var(--column-todo-bg))',
+					progress: 'hsl(var(--column-progress))',
+					'progress-bg': 'hsl(var(--column-progress-bg))',
+					completed: 'hsl(var(--column-completed))',
+					'completed-bg': 'hsl(var(--column-completed-bg))'
+				},
+				countdown: {
+					safe: 'hsl(var(--countdown-safe))',
+					warning: 'hsl(var(--countdown-warning))',
+					danger: 'hsl(var(--countdown-danger))'
 				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
@@ -67,6 +76,18 @@ export default {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)'
+			},
+			backgroundImage: {
+				'gradient-main': 'var(--gradient-bg)',
+				'gradient-card': 'var(--gradient-card)',
+				'gradient-hover': 'var(--gradient-hover)'
+			},
+			boxShadow: {
+				'card': 'var(--shadow-card)',
+				'hover': 'var(--shadow-hover)'
+			},
+			transitionProperty: {
+				'smooth': 'var(--transition-smooth)'
 			},
 			keyframes: {
 				'accordion-down': {
