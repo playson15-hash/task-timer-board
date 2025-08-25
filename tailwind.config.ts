@@ -105,11 +105,29 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'pulse-warning': {
+					'0%, 100%': {
+						borderColor: 'hsl(var(--border))'
+					},
+					'50%': {
+						borderColor: 'hsl(var(--warning-pulse))'
+					}
+				},
+				'blink': {
+					'0%, 50%': {
+						opacity: '1'
+					},
+					'51%, 100%': {
+						opacity: '0.3'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-warning': 'pulse-warning 2s ease-in-out infinite',
+				'blink': 'blink 1s ease-in-out infinite'
 			}
 		}
 	},

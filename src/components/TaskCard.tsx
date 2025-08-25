@@ -1,30 +1,28 @@
 import { useState, useEffect } from 'react';
+import { Draggable } from 'react-beautiful-dnd';
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Clock } from "lucide-react";
-import { Task, TaskStatus } from '../types/kanban';
+import { Clock, Play, Pause, Square } from "lucide-react";
+import { Task } from '../types/task';
+import { MapPreview } from './MapPreview';
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
   task: Task;
-  onTaskMove: (taskId: string, newStatus: TaskStatus) => void;
+  index: number;
+  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
 }
 
-export const TaskCard = ({ task, onTaskMove }: TaskCardProps) => {
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
-  const [showTooltip, setShowTooltip] = useState(false);
+export const TaskCard = ({ task, index, onUpdateTask }: TaskCardProps) => {
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   useEffect(() => {
-    if (task.status !== 'todo') return;
-
     const interval = setInterval(() => {
-      const now = new Date();
-      const remaining = Math.max(0, task.startTime.getTime() - now.getTime());
-      setTimeRemaining(remaining);
+      setCurrentTime(Date.now());
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [task.startTime, task.status]);
+  }, []);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -47,80 +45,139 @@ export const TaskCard = ({ task, onTaskMove }: TaskCardProps) => {
     return 'bg-countdown-danger/10';
   };
 
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('text/plain', task.id);
-  };
-
-  const handleAddressClick = () => {
-    if (task.address) {
-      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.address)}`;
-      window.open(url, '_blank');
+  const handlePomodoroToggle = () => {
+    if (task.pomodoroActive) {
+      // Stop Pomodoro
+      onUpdateTask(task.id, {
+        pomodoroActive: false,
+        pomodoroStartedAt: undefined
+      });
+    } else {
+      // Start Pomodoro
+      onUpdateTask(task.id, {
+        pomodoroActive: true,
+        pomodoroMs: 25 * 60 * 1000, // 25 minutes
+        pomodoroStartedAt: new Date()
+      });
     }
   };
 
-  const formatStartTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+  const handlePomodoroStop = () => {
+    onUpdateTask(task.id, {
+      pomodoroActive: false,
+      pomodoroMs: 25 * 60 * 1000,
+      pomodoroStartedAt: undefined
     });
   };
 
+  // Calculate current Pomodoro time
+  const getCurrentPomodoroMs = () => {
+    if (!task.pomodoroActive || !task.pomodoroStartedAt) return task.pomodoroMs;
+    const elapsed = currentTime - task.pomodoroStartedAt.getTime();
+    return Math.max(0, task.pomodoroMs - elapsed);
+  };
+
+  const pomodoroTimeLeft = getCurrentPomodoroMs();
+  const isPomodoroExpired = task.pomodoroActive && pomodoroTimeLeft <= 0;
+
+  // Check if task should show warning (stuck in todo > 10 min)
+  const isStuckWarning = task.status === 'todo' && task.stuckWarningTime;
+  
+  // Check if countdown is expired and should blink
+  const shouldBlink = task.status === 'todo' && task.isCountdownExpired;
+
   return (
-    <Card
-      className="p-4 cursor-move bg-gradient-card shadow-card hover:shadow-hover transition-all duration-200 border-border/50"
-      draggable
-      onDragStart={handleDragStart}
-    >
-      <div className="space-y-3">
-        <h4 className="font-medium text-foreground leading-tight">{task.title}</h4>
-        
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="w-4 h-4" />
-          <span>{formatStartTime(task.startTime)}</span>
-        </div>
-
-        {task.status === 'todo' && timeRemaining > 0 && (
-          <div className={cn(
-            "flex items-center justify-center py-2 px-3 rounded-lg font-mono text-sm font-semibold",
-            getCountdownColor(timeRemaining),
-            getCountdownBg(timeRemaining)
-          )}>
-            <Clock className="w-4 h-4 mr-2" />
-            {formatTime(timeRemaining)}
-          </div>
-        )}
-
-        {task.address && (
-          <div className="relative">
-            <div
-              className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
-              onClick={handleAddressClick}
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
-            >
-              <MapPin className="w-4 h-4" />
-              <span className="truncate">Local disponível</span>
+    <Draggable draggableId={task.id} index={index}>
+      {(provided, snapshot) => (
+        <Card
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+          className={cn(
+            "p-4 cursor-move bg-gradient-card shadow-card hover:shadow-hover transition-all duration-200 border-border/50",
+            shouldBlink && "animate-blink",
+            isStuckWarning && "animate-pulse-warning",
+            snapshot.isDragging && "rotate-2 scale-105"
+          )}
+        >
+          <div className="space-y-3">
+            <div>
+              <h4 className="font-semibold text-foreground leading-tight">{task.title}</h4>
+              {task.description && (
+                <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
+              )}
             </div>
-            
-            {showTooltip && (
-              <div className="absolute z-10 bottom-full left-0 mb-2 p-2 bg-foreground text-background text-xs rounded shadow-lg max-w-xs">
-                {task.address}
-                <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-foreground"></div>
+
+            {/* 5-minute countdown for todo tasks */}
+            {task.status === 'todo' && (
+              <div className={cn(
+                "flex items-center justify-center py-2 px-3 rounded-lg font-mono text-sm font-semibold",
+                getCountdownColor(task.countdownMs),
+                getCountdownBg(task.countdownMs)
+              )}>
+                <Clock className="w-4 h-4 mr-2" />
+                {task.isCountdownExpired ? "EXPIRADO!" : formatTime(task.countdownMs)}
               </div>
             )}
-          </div>
-        )}
 
-        <div className="flex justify-between items-center">
-          <Badge variant={
-            task.status === 'todo' ? 'secondary' :
-            task.status === 'progress' ? 'default' : 'outline'
-          }>
-            {task.status === 'todo' ? 'Pendente' :
-             task.status === 'progress' ? 'Em andamento' : 'Concluída'}
-          </Badge>
-        </div>
-      </div>
-    </Card>
+            {/* Location with map preview */}
+            {task.location && (
+              <MapPreview location={task.location} />
+            )}
+
+            {/* Pomodoro Timer */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={task.pomodoroActive ? "default" : "outline"}
+                  onClick={handlePomodoroToggle}
+                  className="h-8 px-2"
+                >
+                  {task.pomodoroActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                </Button>
+                
+                {task.pomodoroActive && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handlePomodoroStop}
+                    className="h-8 px-2"
+                  >
+                    <Square className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+
+              {task.pomodoroActive && (
+                <div className={cn(
+                  "text-xs font-mono px-2 py-1 rounded",
+                  isPomodoroExpired ? "bg-countdown-danger/20 text-countdown-danger" : "bg-primary/10 text-primary"
+                )}>
+                  {isPomodoroExpired ? "Pomodoro Concluído!" : formatTime(pomodoroTimeLeft)}
+                </div>
+              )}
+            </div>
+
+            {/* Status badge */}
+            <div className="flex justify-between items-center">
+              <Badge variant={
+                task.status === 'todo' ? 'secondary' :
+                task.status === 'progress' ? 'default' : 'outline'
+              }>
+                {task.status === 'todo' ? 'To Do' :
+                 task.status === 'progress' ? 'In Progress' : 'Done'}
+              </Badge>
+
+              {isStuckWarning && (
+                <Badge variant="destructive" className="text-xs">
+                  Atrasada
+                </Badge>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+    </Draggable>
   );
 };

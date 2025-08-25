@@ -1,154 +1,208 @@
 import { useState, useEffect } from 'react';
-import { Card } from "@/components/ui/card";
+import { DragDropContext, DropResult } from 'react-beautiful-dnd';
 import { KanbanColumn } from './KanbanColumn';
-import { Task, TaskStatus } from '../types/kanban';
-
-export interface KanbanBoardProps {}
+import { ProgressTracker } from './ProgressTracker';
+import { Task, TaskStatus, DailyProgress } from '../types/task';
 
 export const KanbanBoard = () => {
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: '1',
       title: 'Reunião com cliente',
-      startTime: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
+      description: 'Apresentar proposta do novo projeto',
+      location: 'Rua das Flores, 123, São Paulo',
       status: 'todo',
-      address: 'Rua das Flores, 123, São Paulo'
+      createdAt: new Date(),
+      countdownMs: 5 * 60 * 1000, // 5 minutes
+      isCountdownExpired: false,
+      pomodoroActive: false,
+      pomodoroMs: 25 * 60 * 1000
     },
     {
       id: '2',
-      title: 'Revisar relatório',
-      startTime: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes from now
+      title: 'Revisar código',
+      description: 'Pull request #453',
       status: 'todo',
+      createdAt: new Date(Date.now() - 2 * 60 * 1000), // 2 minutes ago
+      countdownMs: 3 * 60 * 1000, // 3 minutes left
+      isCountdownExpired: false,
+      pomodoroActive: false,
+      pomodoroMs: 25 * 60 * 1000
     },
     {
       id: '3',
-      title: 'Call com equipe',
-      startTime: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
+      title: 'Documentar API',
       status: 'progress',
+      createdAt: new Date(Date.now() - 10 * 60 * 1000),
+      countdownMs: 0,
+      isCountdownExpired: true,
+      pomodoroActive: true,
+      pomodoroMs: 15 * 60 * 1000, // 15 minutes left in pomodoro
+      pomodoroStartedAt: new Date(Date.now() - 10 * 60 * 1000)
     },
     {
       id: '4',
-      title: 'Entrega do projeto',
-      startTime: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-      status: 'completed',
+      title: 'Testar nova feature',
+      status: 'done',
+      createdAt: new Date(Date.now() - 30 * 60 * 1000),
+      completedAt: new Date(Date.now() - 5 * 60 * 1000),
+      countdownMs: 0,
+      isCountdownExpired: true,
+      pomodoroActive: false,
+      pomodoroMs: 25 * 60 * 1000
     }
   ]);
 
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress>({
+    date: new Date().toISOString().split('T')[0],
+    completed: 1,
+    goal: 5
+  });
 
-  // Update current date every minute
+  // Update countdowns and check for stuck tasks
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentDate(new Date());
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Check for tasks that need to move from todo to progress
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
+      const now = Date.now();
+      
       setTasks(prevTasks => 
         prevTasks.map(task => {
-          if (task.status === 'todo' && task.startTime <= now) {
-            // Send notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(`Tarefa iniciada: ${task.title}`, {
-                icon: '/favicon.ico',
-                body: task.address ? `Local: ${task.address}` : 'Sua tarefa começou agora!'
-              });
+          if (task.status === 'todo') {
+            const elapsed = now - task.createdAt.getTime();
+            const remaining = Math.max(0, (5 * 60 * 1000) - elapsed);
+            
+            // Check if task has been stuck for > 10 minutes
+            const stuckWarningTime = elapsed > 10 * 60 * 1000 ? new Date() : undefined;
+            
+            // Move to progress if countdown expired
+            if (remaining === 0 && !task.isCountdownExpired) {
+              // Check if In Progress has space (max 3)
+              const inProgressCount = prevTasks.filter(t => t.status === 'progress').length;
+              if (inProgressCount < 3) {
+                return {
+                  ...task,
+                  status: 'progress' as TaskStatus,
+                  countdownMs: 0,
+                  isCountdownExpired: true
+                };
+              }
             }
-            return { ...task, status: 'progress' as TaskStatus };
+            
+            return {
+              ...task,
+              countdownMs: remaining,
+              isCountdownExpired: remaining === 0,
+              stuckWarningTime
+            };
           }
           return task;
         })
       );
     }, 1000);
+
     return () => clearInterval(interval);
   }, []);
 
-  // Request notification permission on mount
+  // Update daily progress when tasks are completed
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
+    const today = new Date().toISOString().split('T')[0];
+    const completedToday = tasks.filter(task => 
+      task.status === 'done' && 
+      task.completedAt && 
+      task.completedAt.toISOString().split('T')[0] === today
+    ).length;
 
-  const formatDate = (date: Date) => {
-    const days = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    
-    const dayName = days[date.getDay()];
-    const day = date.getDate();
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${dayName}, ${day} de ${month} de ${year}`;
-  };
+    setDailyProgress(prev => ({
+      ...prev,
+      completed: completedToday
+    }));
+  }, [tasks]);
 
-  const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
+  const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
-        task.id === taskId ? { ...task, status: newStatus } : task
+        task.id === taskId ? { ...task, ...updates } : task
       )
     );
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const { source, destination, draggableId } = result;
+    
+    if (source.droppableId === destination.droppableId && source.index === destination.index) {
+      return;
+    }
+
+    const newStatus = destination.droppableId as TaskStatus;
+    
+    // Check In Progress limit (max 3)
+    if (newStatus === 'progress') {
+      const inProgressTasks = tasks.filter(task => task.status === 'progress');
+      if (inProgressTasks.length >= 3 && source.droppableId !== 'progress') {
+        return; // Don't allow move if already at limit
+      }
+    }
+
+    setTasks(prevTasks => {
+      const updatedTasks = [...prevTasks];
+      const taskIndex = updatedTasks.findIndex(task => task.id === draggableId);
+      
+      if (taskIndex !== -1) {
+        const updates: Partial<Task> = { status: newStatus };
+        
+        // Mark as completed if moved to done
+        if (newStatus === 'done') {
+          updates.completedAt = new Date();
+          updates.pomodoroActive = false; // Stop any active pomodoro
+        }
+        
+        updatedTasks[taskIndex] = { ...updatedTasks[taskIndex], ...updates };
+      }
+      
+      return updatedTasks;
+    });
   };
 
   const getTasksByStatus = (status: TaskStatus) => {
     return tasks.filter(task => task.status === status);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, status: TaskStatus) => {
-    e.preventDefault();
-    const taskId = e.dataTransfer.getData('text/plain');
-    handleTaskMove(taskId, status);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-main">
       <div className="container mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Kanban Board</h1>
-          <p className="text-muted-foreground text-lg">{formatDate(currentDate)}</p>
-        </div>
+        <ProgressTracker 
+          progress={dailyProgress} 
+          currentDate={dailyProgress.date}
+        />
 
-        {/* Kanban Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-6xl mx-auto">
-          <KanbanColumn
-            title="To Do"
-            status="todo"
-            tasks={getTasksByStatus('todo')}
-            onTaskMove={handleTaskMove}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'todo')}
-            className="bg-kanban-todo-bg border-kanban-todo"
-          />
-          
-          <KanbanColumn
-            title="In Progress"
-            status="progress"
-            tasks={getTasksByStatus('progress')}
-            onTaskMove={handleTaskMove}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'progress')}
-            className="bg-kanban-progress-bg border-kanban-progress"
-          />
-          
-          <KanbanColumn
-            title="Completed"
-            status="completed"
-            tasks={getTasksByStatus('completed')}
-            onTaskMove={handleTaskMove}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'completed')}
-            className="bg-kanban-completed-bg border-kanban-completed"
-          />
-        </div>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+            <KanbanColumn
+              title="To Do"
+              status="todo"
+              tasks={getTasksByStatus('todo')}
+              onUpdateTask={handleUpdateTask}
+              className="bg-kanban-todo-bg border-kanban-todo"
+            />
+            
+            <KanbanColumn
+              title="In Progress"
+              status="progress"
+              tasks={getTasksByStatus('progress')}
+              onUpdateTask={handleUpdateTask}
+              className="bg-kanban-progress-bg border-kanban-progress"
+            />
+            
+            <KanbanColumn
+              title="Done"
+              status="done"
+              tasks={getTasksByStatus('done')}
+              onUpdateTask={handleUpdateTask}
+              className="bg-kanban-completed-bg border-kanban-completed"
+            />
+          </div>
+        </DragDropContext>
       </div>
     </div>
   );

@@ -62,6 +62,14 @@ All colors MUST be HSL.
     /* Animation */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
+    /* Progress tracking */
+    --progress-bg: 220 15% 90%;
+    --progress-fill: 142 76% 36%;
+
+    /* Warning colors */
+    --warning-pulse: 38 92% 50%;
+    --blink-color: 0 84% 60%;
+
     --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
